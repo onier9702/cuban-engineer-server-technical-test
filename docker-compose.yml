@@ -1,0 +1,45 @@
+version: "3.7"
+services:
+  app:
+    container_name: ${CUBAN_CONTAINER_NAME:-cuban-server}
+    build: .
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=production
+    ports:
+      - "3011:3011"
+    volumes:
+      - .:/app
+    restart: always
+    depends_on: [mariadb]
+    networks:
+      cubannet:
+        aliases:
+          - cuban-app
+
+  mariadb:
+    image: "mariadb:${MARIADB_VERSION:-10.11.2}"
+    container_name: ${MARIADB_CONTAINER_NAME:-cuban-mariadb}
+    env_file:
+      - .env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MARIADB_USER: ${DB_USERNAME}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "63311:3306"
+    restart: always
+    networks:
+      cubannet:
+        aliases:
+          - cuban-mariadb
+    volumes:
+      - ./mysql-data:/var/lib/mysql
+
+networks:
+  cubannet:
+    driver: bridge
+    driver_opts:
+      com.docker.network.enable_ipv6: "false"
