@@ -13,10 +13,10 @@ The Network is created between the cuban-server app and cuban-mariadb (database 
 
 # Steps to running the server on development mode
 
-1. Create the `.env` file and set the environment variables
+1. Replace the `.env.example` to `.env` file and configure the environment variables
 2. Run and start the container image with the command `docker compose -f docker-compose.dev.yml up -d`
-3. Enter to cuban-server container
-4. Inside the container run this command to generate entities in database `npm run migration:run`
+3. Enter to cuban-server container `docker exec -it cuban-server /bin/sh`
+4. Generate entities in database inside the container, run this command `npm run migration:run`
 
 ## Installations
 

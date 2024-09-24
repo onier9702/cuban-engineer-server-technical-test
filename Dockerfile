@@ -19,5 +19,5 @@ EXPOSE 3011
 RUN npm run build
 
 # Define the command to start your NestJS application
-# ChangeMe! to CMD ["npm", "run", "start:dev"]
+# ChangeMe! to CMD ["npm", "run", "start:dev"] in development environment
 CMD ["npm", "run", "start:prod"]

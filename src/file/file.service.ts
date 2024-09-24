@@ -147,7 +147,8 @@ export class FileService {
     try {
 
       const qb = this.fileRepository.createQueryBuilder('f')
-        .where('f.active = :active', { active: true });
+        .where('f.active = :active', { active: true })
+        .orderBy('f.id', 'DESC');
 
       const [allFiles, total] = await qb
         .take(limit)
