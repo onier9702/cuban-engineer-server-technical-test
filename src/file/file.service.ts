@@ -1,8 +1,10 @@
-import { BadGatewayException, BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, Injectable, InternalServerErrorException, NotFoundException, } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { join } from 'path';
-import { existsSync, unlinkSync } from 'fs';
+import { createWriteStream, existsSync, promises, unlinkSync } from 'fs';
+import * as archiver from 'archiver';
+import { Response } from 'express';
 
 import { File } from './entities/file.entity';
 
@@ -27,22 +29,38 @@ export class FileService {
   // CREATE
   public async create(
     createFileDto: CreateFileDto,
-    pathfile: string,
-  ): Promise<Message> {
+    fileObject: Express.Multer.File,
+  ): Promise<any> {
       
     try {
 
       const { name } = createFileDto;
-
+      
       // Verify duplicity in files by name
       const file = await this.fileRepository.findOneBy({name});
       if ( file ) {
         throw new BadRequestException(`File with name ${name} already exists on database.`);
       }
-      
+
+      // Create the zip file
+      const zipFilePath = await this.createZipFile(fileObject);
+
+      // remove file to only have the one with .zip extension
+      this.removeImageFromFS(fileObject.path);
+
+      // Get the size of the generated zip file
+      const zipFileStats = await promises.stat(zipFilePath);
+      const zipFileSize = zipFileStats.size; // Size in bytes
+
+      // Create URL with .zip extension
+      const partsUrl = fileObject.path.split('.');
+      const url = `${partsUrl[0]}.zip`;
+
       const newFile = this.fileRepository.create({
-        name: name.toUpperCase(),
-        active: true,
+          name: name.toUpperCase(),
+          url,
+          size: zipFileSize, // Use the size of the zip file
+          active: true,
       });
 
       await this.fileRepository.save(newFile);
@@ -53,7 +71,7 @@ export class FileService {
       
     } catch (error) {
       // Make sure to keep FS clean of images
-      this.removeImageFromFS(pathfile);
+      this.removeImageFromFS(fileObject.path);
 
       this.handleExceptionsErrorOnDB(error);
     }
@@ -87,30 +105,39 @@ export class FileService {
 
   }
 
-  // methods to keep uploads directory clean
-  private getStaticFile( fileName: string ): string {
+  public async download(fileId: number, res: Response): Promise<void> {
+    try {
+      const file = await this.findOneQuery(fileId);
 
-    const path = join( __dirname, '../../uploads/files', fileName ); // create a physic path to get file name if it exists
-    if ( !existsSync(path) ) {
-      throw new BadGatewayException( `No file found with path ${fileName}` );
+      if (!file) {
+        throw new NotFoundException(`File with ID: ${fileId} not found`);
+      }
+
+      const fileName = file.url.split('files/')[1];
+      const pathFile = this.getStaticFile(fileName);
+
+      // Set headers for download
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.setHeader('Content-Type', 'application/zip');
+
+      // Stream the file to the client
+      res.sendFile(pathFile, (err) => {
+        if (err) {
+          console.error('Error while sending file:', err);
+          throw new InternalServerErrorException('Error occurred while downloading the file');
+        }
+      });
+      
+    } catch (error) {
+      console.error('Download error:', error);
+      res.status(500).json({
+        statusCode: 500,
+        message: 'Internal server error',
+        error: error.message || 'Unknown error',
+      });
     }
-    // if file with that name exists, return that name path
-    return path;
   }
 
-  private deleteFileFromFs( path: string ): void {
-      unlinkSync(path);
-  }
-
-  // in case the creation, I need to remove the file from fs
-  private removeImageFromFS( path: string ) {
-    const divisionPath = path.split('files/');
-    const filename = divisionPath[ divisionPath.length - 1];
-    const pathFromFs = this.getStaticFile(filename);
-    this.deleteFileFromFs(pathFromFs);
-  }
-
-  // FIND ALL File on DB
   public async findAll(
     paginationFileDto: PaginationFileDto
   ): Promise<ICountAndTotalFile> {
@@ -170,11 +197,77 @@ export class FileService {
     };
   }
 
+  private async createZipFile(file: Express.Multer.File): Promise<string> {
+    const uploadDir = 'uploads';
+    const filePath = `${uploadDir}/${file.filename}`;
+    
+    // Set the zip file name to just the UUID with .zip extension
+    const zipFileName = `${file.filename.split('.')[0]}.zip`; // Only keep the UUID part
+    const zipFilePath = `${uploadDir}/${zipFileName}`; // Save as UUID.zip
+
+    // Create a file stream for the zip file
+    const output = createWriteStream(zipFilePath);
+    const archive = archiver('zip', { zlib: { level: 9 } }); // Set the compression level
+
+    return new Promise<string>((resolve, reject) => {
+        output.on('close', () => {
+            resolve(zipFilePath); // Return the path of the created zip file
+        });
+
+        output.on('end', () => {
+            console.log('Data has been drained');
+        });
+
+        archive.on('warning', (err) => {
+            if (err.code === 'ENOENT') {
+                console.warn(err);
+            } else {
+                reject(err);
+            }
+        });
+
+        archive.on('error', (err) => {
+            reject(err);
+        });
+
+        // Pipe the archive data to the file
+        archive.pipe(output);
+
+        // Append the original file to the archive
+        archive.file(filePath, { name: file.originalname });
+
+        // Finalize the archive (i.e., the zip file)
+        archive.finalize();
+    });
+  }
+
   private async findOneQuery(id: number): Promise<File> {
     const file = await this.fileRepository.findOneBy( { id, active: true } );
     if ( !file ) throw new BadRequestException(`File with ID: ${id} not found`);
     
     return file;
+  }
+
+  private getStaticFile( fileName: string ): string {
+
+    const path = join( __dirname, '../../uploads/files', fileName ); // create a physic path to get file name if it exists
+    if ( !existsSync(path) ) {
+      throw new BadGatewayException( `No file found with path ${fileName}` );
+    }
+    // if file with that name exists, return that name path
+    return path;
+  }
+
+  private deleteFileFromFs( path: string ): void {
+      unlinkSync(path);
+  }
+
+  // in case the creation failed, I need to remove the file from fs
+  private removeImageFromFS( path: string ) {
+    const divisionPath = path.split('files/');
+    const filename = divisionPath[ divisionPath.length - 1];
+    const pathFromFs = this.getStaticFile(filename);
+    this.deleteFileFromFs(pathFromFs);
   }
 
   private handleExceptionsErrorOnDB( err: any ) {

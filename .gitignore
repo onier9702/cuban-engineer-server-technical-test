@@ -10,8 +10,9 @@
 !/mysql-data/.gitkeep
 
 # Uploads (avoid to upload this to repository)
-/uploads/*
+/uploads/files/*
 !/uploads/.gitkeep
+!/uploads/files/.gitkeep
 
 # Logs
 logs

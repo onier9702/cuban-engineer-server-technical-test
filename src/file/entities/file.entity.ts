@@ -14,7 +14,7 @@ export class File {
     url: string; // conformed by path directory => 'file/' + UUID
 
     @Column()
-    size: string;
+    size: number;
 
     @Column({ default: StatusFile.CREATED })
     status: string;

@@ -11,6 +11,13 @@ Backend server for Cuban Engineer technical test. Created by Onier Crestelo Ojed
 I use here MariaDB inside the docker network so MariaDB is free and it is better MySql solution today.
 The Network is created between the cuban-server app and cuban-mariadb (database runnning).
 
+# Steps to running the server on development mode
+
+1. Create the `.env` file and set the environment variables
+2. Run and start the container image with the command `docker compose -f docker-compose.dev.yml up -d`
+3. Enter to cuban-server container
+4. Inside the container run this command to generate entities in database `npm run migration:run`
+
 ## Installations
 
 1. @nestjs/config so can use ConfigModule
@@ -85,6 +92,16 @@ npm i -D @types/passport-jwt
 
 ```
 npm i @nestjs/mapped-types
+```
+
+14. Archiver to generate zip files
+
+```
+npm install archiver
+```
+
+```
+npm i --save-dev @types/archiver
 ```
 
 ## Test
